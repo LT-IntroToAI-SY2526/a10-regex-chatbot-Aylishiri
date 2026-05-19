@@ -1,12 +1,21 @@
 import re, string, calendar, requests, time
-from wikipedia import WikipediaPage
-import wikipedia
 from bs4 import BeautifulSoup
 from match import match
 from typing import List, Callable, Tuple, Any, Match
 
 
 def get_page_html(title: str) -> str:
+    search_response = requests.get(
+        "https://en.wikipedia.org/w/api.php",
+        params={"action": "query", "list": "search", "srsearch": title, "format": "json"},
+        headers={"User-Agent": "intro-ai-class/1.0"},
+        timeout=10
+    )
+    results = search_response.json().get("query", {}).get("search", [])
+    if results:
+        title = results[0]["title"]  # use the top search result title
+        print(f"Searching Wikipedia for: {title}")
+    
     for attempt in range(5):
         response = requests.get(
             "https://en.wikipedia.org/w/api.php",
@@ -30,6 +39,7 @@ def get_page_html(title: str) -> str:
                 time.sleep(2)  # polite delay after every successful call
                 return data["parse"]["text"]["*"]
     raise ConnectionError(f"Could not retrieve Wikipedia page for '{title}' after 5 attempts")
+
 
 
 def get_first_infobox_text(html: str) -> str:
@@ -122,6 +132,80 @@ def get_birth_date(name: str) -> str:
 
     return match.group("birth")
 
+def get_death_date(name: str) -> str:
+    infobox_text = clean_text(get_first_infobox_text(get_page_html(name)))
+    print(infobox_text)
+
+    pattern = r"Died.*?(?P<death>[A-Z][a-z]+ \d{1,2}, \d{4})"
+
+    match = re.search(pattern, infobox_text, re.IGNORECASE | re.DOTALL)
+
+    if not match:
+        return "Death date not found"
+
+    return match.group("death")
+
+
+def get_population(place: str) -> str:
+    """Gets population of a city/state/country."""
+
+    html = get_page_html(place)
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    infobox = soup.find("table", class_=lambda x: x and "infobox" in x)
+
+    if not infobox:
+        return "Population not found"
+
+    text = infobox.get_text(" ", strip=True)
+
+    # Find large comma-separated numbers
+    matches = re.findall(r"\b\d{1,3}(?:,\d{3})+\b", text)
+
+    if not matches:
+        return "Population not found"
+
+    # Return largest number found
+    largest = max(matches, key=lambda x: int(x.replace(",", "")))
+
+    return largest
+
+
+
+def get_height(mountain: str) -> str:
+    infobox_text = clean_text(get_first_infobox_text(get_page_html(mountain)))
+    print(infobox_text)
+    pattern = r"(?:Elevation|Height)(?:[^\d]+)(?P<h>[0-9,]+)\s*m"
+    error_text = "Page infobox has no height information"
+    match = get_match(infobox_text, pattern, error_text)
+    return match.group("h")
+
+
+    
+def get_area(place: str) -> str:
+    """Gets total area of a country/state/city from its infobox."""
+
+    html = get_page_html(place)
+    soup = BeautifulSoup(html, "html.parser")
+
+    infobox = soup.find("table", class_=lambda x: x and "infobox" in x)
+
+    if not infobox:
+        return "Area not found"
+
+    text = infobox.get_text(" ", strip=True)
+
+    match = re.search(
+        r"Area.*?([\d,.]+)\s*km",
+        text,
+        re.IGNORECASE | re.DOTALL
+    )
+
+    if not match:
+        return "Area not found"
+
+    return match.group(1)
 
 # below are a set of actions. Each takes a list argument and returns a list of answers
 # according to the action and the argument. It is important that each function returns a
@@ -151,6 +235,27 @@ def polar_radius(matches: List[str]) -> List[str]:
     """
     return [get_polar_radius(matches[0])]
 
+def death_date(matches: List[str]) -> List[str]:
+    name = " ".join(matches).strip()
+    result = get_death_date(name)
+    return [result]
+
+def population(matches: List[str]) -> List[str]:
+    place = " ".join(matches).strip()
+    result = get_population(place)
+    return [result]
+
+
+
+def area(matches: List[str]) -> List[str]:
+    place = " ".join(matches).strip()
+    result = get_area(place)
+    return [result]
+
+def mountain_height(matches: List[str]) -> List[str]:
+    return [get_height(" ".join(matches))]
+
+
 
 # dummy argument is ignored and doesn't matter
 def bye_action(dummy: List[str]) -> None:
@@ -167,8 +272,17 @@ Action = Callable[[List[str]], List[Any]]
 pa_list: List[Tuple[Pattern, Action]] = [
     ("when was % born".split(), birth_date),
     ("what is the polar radius of %".split(), polar_radius),
+
+    # NEW FEATURES
+    ("when did % die".split(), death_date),
+    
+    ("what is the population of %".split(), population),
+    ("how tall is %".split(), mountain_height),
+    ("what is the area of %".split(), area),
+
     (["bye"], bye_action),
 ]
+
 
 
 def search_pa_list(src: List[str]) -> List[str]:
