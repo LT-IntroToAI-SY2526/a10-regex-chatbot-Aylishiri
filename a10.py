@@ -134,7 +134,6 @@ def get_birth_date(name: str) -> str:
 
 def get_death_date(name: str) -> str:
     infobox_text = clean_text(get_first_infobox_text(get_page_html(name)))
-    print(infobox_text)
 
     pattern = r"Died.*?(?P<death>[A-Z][a-z]+ \d{1,2}, \d{4})"
 
@@ -171,17 +170,6 @@ def get_population(place: str) -> str:
 
     return largest
 
-
-
-def get_height(mountain: str) -> str:
-    infobox_text = clean_text(get_first_infobox_text(get_page_html(mountain)))
-    print(infobox_text)
-    pattern = r"(?:Elevation|Height)(?:[^\d]+)(?P<h>[0-9,]+)\s*m"
-    error_text = "Page infobox has no height information"
-    match = get_match(infobox_text, pattern, error_text)
-    return match.group("h")
-
-
     
 def get_area(place: str) -> str:
     """Gets total area of a country/state/city from its infobox."""
@@ -206,7 +194,40 @@ def get_area(place: str) -> str:
         return "Area not found"
 
     return match.group(1)
+def get_capital_city(place: str) -> str:
+    """Gets capital city of a state/country."""
 
+    html = get_page_html(place)
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    infobox = soup.find("table", class_=lambda x: x and "infobox" in x)
+
+    if not infobox:
+        return "Capital city not found"
+
+    rows = infobox.find_all("tr")
+
+    for row in rows:
+
+        header = row.find("th")
+
+        if header and "capital" in header.get_text().lower():
+
+            td = row.find("td")
+
+            if td:
+
+                text = td.get_text(" ", strip=True)
+
+                text = re.sub(r"\[\d+\]", "", text)
+
+                words = text.split()
+
+                if words:
+                    return words[0]
+
+    return "Capital city not found"
 # below are a set of actions. Each takes a list argument and returns a list of answers
 # according to the action and the argument. It is important that each function returns a
 # list of the answer(s) and not just the answer itself.
@@ -245,15 +266,19 @@ def population(matches: List[str]) -> List[str]:
     result = get_population(place)
     return [result]
 
-
+def capital_city(matches: List[str]) -> List[str]:
+    country = " ".join(matches).strip()
+    result = get_capital_city(country)
+    return [result]
 
 def area(matches: List[str]) -> List[str]:
     place = " ".join(matches).strip()
     result = get_area(place)
     return [result]
 
-def mountain_height(matches: List[str]) -> List[str]:
-    return [get_height(" ".join(matches))]
+
+
+
 
 
 
@@ -275,9 +300,8 @@ pa_list: List[Tuple[Pattern, Action]] = [
 
     # NEW FEATURES
     ("when did % die".split(), death_date),
-    
     ("what is the population of %".split(), population),
-    ("how tall is %".split(), mountain_height),
+    ("what is the capital of %".split(), capital_city),
     ("what is the area of %".split(), area),
 
     (["bye"], bye_action),
