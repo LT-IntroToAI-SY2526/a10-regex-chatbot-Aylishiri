@@ -1,4 +1,6 @@
 import re, string, calendar, requests, time
+import wikipedia
+from wikipedia import WikipediaPage
 from bs4 import BeautifulSoup
 from match import match
 from typing import List, Callable, Tuple, Any, Match
@@ -194,6 +196,22 @@ def get_area(place: str) -> str:
         return "Area not found"
 
     return match.group(1)
+
+def get_official_language(place: str) -> str:
+    """Gets the official language of the given place"""
+    search_term = place.strip().title()
+    html = get_page_html(search_term)
+    infobox_text = clean_text(get_first_infobox_text(html))
+    #print(infobox_text)
+    
+    # Regex looks for "Official language" followed by the first word(s)
+    # until it hits a newline or a bracketed reference.
+    pattern =r"Official\s+languages?\s*(?P<lang>[A-Z][a-z]+)"
+    error_text = f"I found the page for {search_term}, but couldn't identify the official language."
+    
+    match_obj = get_match(infobox_text, pattern, error_text)
+    return match_obj.group("lang").strip()
+
 def get_capital_city(place: str) -> str:
     """Gets capital city of a state/country."""
 
@@ -256,6 +274,16 @@ def polar_radius(matches: List[str]) -> List[str]:
     """
     return [get_polar_radius(matches[0])]
 
+def get_gdp(country: str) -> str:
+    infobox_text = clean_text(get_first_infobox_text(get_page_html(country)))
+
+    pattern = r"GDP[^\$]*\$(?P<gdp>[\d.,]+(?:\s*(?:billion|trillion))?)"
+
+    error_text = "Page infobox has no GDP information"
+    match = get_match(infobox_text, pattern, error_text)
+
+    return "$" + match.group("gdp")
+
 def death_date(matches: List[str]) -> List[str]:
     name = " ".join(matches).strip()
     result = get_death_date(name)
@@ -275,6 +303,14 @@ def area(matches: List[str]) -> List[str]:
     place = " ".join(matches).strip()
     result = get_area(place)
     return [result]
+
+def gdp(matches: List[str]) -> List[str]:
+    return [get_gdp(" ".join(matches))]
+
+def official_language(matches: List[str]) -> List[str]:
+    """Action function for the official language query."""
+    return [get_official_language(" ".join(matches))]
+
 
 
 
@@ -298,11 +334,18 @@ pa_list: List[Tuple[Pattern, Action]] = [
     ("when was % born".split(), birth_date),
     ("what is the polar radius of %".split(), polar_radius),
 
-    # NEW FEATURES
+    # NEW FEATURES part 1
     ("when did % die".split(), death_date),
     ("what is the population of %".split(), population),
     ("what is the capital of %".split(), capital_city),
     ("what is the area of %".split(), area),
+    
+    ("what is the gdp of %".split(), gdp),
+    ("gdp of %".split(), gdp),
+    ("how big is % gdp".split(), gdp),
+
+    ("what language do they speak in %".split(), official_language),
+
 
     (["bye"], bye_action),
 ]
