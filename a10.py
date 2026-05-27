@@ -197,20 +197,6 @@ def get_area(place: str) -> str:
 
     return match.group(1)
 
-def get_official_language(place: str) -> str:
-    """Gets the official language of the given place"""
-    search_term = place.strip().title()
-    html = get_page_html(search_term)
-    infobox_text = clean_text(get_first_infobox_text(html))
-    #print(infobox_text)
-    
-    # Regex looks for "Official language" followed by the first word(s)
-    # until it hits a newline or a bracketed reference.
-    pattern =r"Official\s+languages?\s*(?P<lang>[A-Z][a-z]+)"
-    error_text = f"I found the page for {search_term}, but couldn't identify the official language."
-    
-    match_obj = get_match(infobox_text, pattern, error_text)
-    return match_obj.group("lang").strip()
 
 def get_capital_city(place: str) -> str:
     """Gets capital city of a state/country."""
@@ -246,6 +232,52 @@ def get_capital_city(place: str) -> str:
                     return words[0]
 
     return "Capital city not found"
+
+def get_official_language(place: str) -> str:
+    """Gets the official language of the given place"""
+    search_term = place.strip().title()
+    html = get_page_html(search_term)
+    infobox_text = clean_text(get_first_infobox_text(html))
+    #print(infobox_text)
+    
+    # Regex looks for "Official language" followed by the first word(s)
+    # until it hits a newline or a bracketed reference.
+    pattern =r"Official\s+languages?\s*(?P<lang>[A-Z][a-z]+)"
+    error_text = f"I found the page for {search_term}, but couldn't identify the official language."
+    
+    match_obj = get_match(infobox_text, pattern, error_text)
+    return match_obj.group("lang").strip()
+
+def get_leader(place: str) -> str:
+    """Gets the leader (e.g., President, Prime Minister) of the given place"""
+    search_term = place.strip().title()
+    html = get_page_html(search_term)
+    infobox_text = clean_text(get_first_infobox_text(html))
+    # Matches things like:
+    # "President Joe Biden"
+    # "Prime Minister Justin Trudeau"
+    pattern = r"(President|Prime Minister|Monarch|Leader)\s+(?P<name>[A-Z][a-z]+(?:\s[A-Z][a-z]+)*)"    
+    error_text = f"I found the page for {search_term}, but couldn't identify a leader."
+ 
+    match_obj = get_match(infobox_text, pattern, error_text)
+    return match_obj.group("name").strip()
+
+def get_mean_anomaly(planet_name: str) -> str:
+    """Gets the mean anomaly of the planet."""
+    infobox_text = clean_text(get_first_infobox_text(get_page_html(planet_name)))
+    pattern = r"Mean anomaly(?:.*?)(?P<anomaly>[\d,.]+)(?P<unit>°)"
+    error_text = f"Page infobox for {planet_name} has no mean anomaly information"
+    match = get_match(infobox_text, pattern, error_text)
+    return f"{match.group('anomaly')}{match.group('unit')}"
+
+def get_satellites(planet_name: str) -> str:
+    """Gets the number of natural satellites (moons) of the planet."""
+    infobox_text = clean_text(get_first_infobox_text(get_page_html(planet_name)))
+    pattern = r"Satellites(?:.*?)(?P<count>\d+)"
+    error_text = f"Page infobox for {planet_name} has no satellite information"
+    match = get_match(infobox_text, pattern, error_text)
+    return f"{match.group('count')}"
+
 # below are a set of actions. Each takes a list argument and returns a list of answers
 # according to the action and the argument. It is important that each function returns a
 # list of the answer(s) and not just the answer itself.
@@ -312,9 +344,11 @@ def official_language(matches: List[str]) -> List[str]:
     return [get_official_language(" ".join(matches))]
 
 
+def leader_of_place(matches: List[str]) -> List[str]:
+    return [get_leader(" ".join(matches))]
 
-
-
+def satellites(matches: List[str]) -> List[str]:
+    return [get_satellites(matches[0])]
 
 
 
@@ -340,11 +374,13 @@ pa_list: List[Tuple[Pattern, Action]] = [
     ("what is the capital of %".split(), capital_city),
     ("what is the area of %".split(), area),
     
+    #
     ("what is the gdp of %".split(), gdp),
     ("gdp of %".split(), gdp),
     ("how big is % gdp".split(), gdp),
-
+    ("who is the leader of %".split(), leader_of_place),
     ("what language do they speak in %".split(), official_language),
+    ("how many satellites does % have".split(), satellites),
 
 
     (["bye"], bye_action),
